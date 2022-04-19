@@ -1,0 +1,194 @@
+package gebd.progetto;
+
+import java.awt.Component;
+import java.util.ArrayList;
+
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Scanner;
+import java.util.Map.Entry;
+
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.SparkSession;
+import org.graphframes.GraphFrame;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
+
+import scala.Tuple2;
+
+
+public class Mainmatrici {
+/* 
+ * Applicazione Spark
+ */
+	
+	ArrayList<Boolean> risultato = new ArrayList<Boolean>();
+
+	public static void main(String[] args) {	
+		
+		
+		
+		/* 
+		 * decidiamo di sopprimere tutti questi messaggi 
+		 * tranne che nel caso di errori
+		 */
+		Logger.getLogger("org").setLevel(Level.ERROR); //import org.apache.log4j.Level;
+		Logger.getLogger("akka").setLevel(Level.ERROR);
+		
+		/* Definiamo la configurazione di Spark
+		 */		
+		
+		SparkConf sc = new SparkConf();
+		
+		/* 
+		 * Diamo un nome all'applicazione
+		 */
+		sc.setAppName("Progetto GEBD");
+		/*
+		 *  tra parentesi quadra [] posso indicare il numero di core da riservare a spark indicandolo tra parentesi quadra.
+		 *  * vuol dire "usali tutti"
+		 */
+		sc.setMaster("local[*]");
+		
+		/*
+		 * Una volta deifnita la configurazione iniziale, 		 * posso avviare Spark attraverso l'oggetto 
+		 * JavaSparkContext
+		 */
+		JavaSparkContext jsc = new JavaSparkContext(sc);
+		
+		SparkSession spark = SparkSession.builder().master("local[*]").appName("Test grafi").getOrCreate();
+		spark.sparkContext().setLogLevel("ERROR");
+		
+		/*
+		 * Qui caricher� il file con le sequenze di Stringhe su cui lavorare
+		 */
+				JavaRDD<String> Stringhe = jsc.textFile("data/testo11.txt");
+		
+		/*
+		 * Creo i k-meri dai dati appena caricati in dLines1
+		 * Uso flatmap to pair perch� da una sola sequenza mi aspetto molteplici k-meri
+		 */
+				JavaPairRDD<String, Integer> KmeriCompleti = Stringhe.flatMapToPair(new Kmeri());
+				JavaPairRDD<String, Integer> Prefisso = Stringhe.flatMapToPair(new KmeriP());		
+				JavaPairRDD<String, Integer> Suffisso = Stringhe.flatMapToPair(new KmeriS());
+				JavaPairRDD<String, Tuple2<Integer, Integer>> Archi = Suffisso.join(Prefisso);
+			
+				/*
+				 * Conversione da JavaPairRDD a JavaRDD
+				 * Gli oggetti di tipo JavaRDD ora possono essere passati come oggetti di tipo Graphframe
+				 */		
+				
+				JavaRDD<String> Archi1 = Archi.map(x->new String(x._1 + "(" + (x._2._1 + "," + x._2._2) + ")"));
+				JavaRDD<String> KmeriCompleti1 = Archi.map(x->new String(x._1 + x._2));
+				JavaRDD<String> Suffisso1 = Archi.map(x->new String(x._1 + x._2));
+				JavaRDD<String> Prefisso1 = Archi.map(x->new String(x._1 + x._2));
+				JavaRDD<String> Archi2 = Archi.map(x->new String(x._1));
+				
+				
+				System.out.println("Gli archi tra i k-meri sono: " + Archi2.collect());
+				
+				
+				String[] myList= Archi2.collect().toArray(new String[0]);
+				System.out.println(myList.length);
+				
+				String[] myList1= Archi2.take(15).toArray(new String[0]);
+				System.out.println("Dimensione myList1 : "  + myList1.length);
+				
+			//	System.out.println("Primo elemento : "  + myList1[1]);
+			//	System.out.println("Secondo elemento : "  + myList1[2]);
+			//	System.out.println("Primo elemento : "  + myList[1]);
+			//	System.out.println("Secondo elemento : "  + myList[2]);
+						
+				
+				ArrayList<String> lista = new ArrayList<String>(Arrays.asList(myList));
+				ArrayList<String> lista1 = new ArrayList<String>(Arrays.asList(myList1));
+				
+				
+				
+
+				System.out.println("Primo elemento : "  + lista1.get(0));
+				System.out.println("Secondo elemento : "  + lista1.get(1));
+				System.out.println("terzo elemento : "  + lista1.get(2));
+				System.out.println("quarto elemento : "  + lista1.get(3));
+				
+			
+				
+				Confrontaparole confrontoParole = new  Confrontaparole(lista1);
+					
+				Creacluster clusterEnum = new Creacluster(confrontoParole);
+				
+				for(int x = 1; x< clusterEnum.nuoveParole.size(); x++) {
+					
+					clusterEnum.NUOVOpopolaCluster(clusterEnum.nuoveParole);
+				}
+				
+	
+	System.out.println("  ");
+	System.out.println("----------------------------");
+    System.out.println("  ");
+	
+	HashMap<Integer, Double> hashmapPurezza = new HashMap<>();
+	
+	
+	for(int x = 0; x < clusterEnum.listaCluster.size(); x++) {
+		int posStart1 = x + 1;
+		hashmapPurezza.put(posStart1, clusterEnum.getPurezza(clusterEnum.listaCluster.get(x)));
+	}
+
+
+	
+	//STAMPA HASHMAP NON ORDINATO
+	System.out.println("\n\nSTAMPA HASHMAP NON ORDINATO");
+	for(Map.Entry entry: hashmapPurezza.entrySet()){
+		System.out.println("Cluster n� " + entry.getKey() + " ha una purezza di "  + entry.getValue());
+	}
+
+	
+	
+	//STAMPO HASHMAP
+	//NUOVO
+	//USO LE COLLECTION PER STAMPARE 
+	//TI HO CREATO UN METODO APPOSTA ALLA FINE
+	//RITORNA UNA LISTA CHE USO PER STAMPARE
+	System.out.println("\nORDINE DECRESCENTE");
+	
+	
+	
+	for(Map.Entry entry: clusterEnum.OrdinaHashmap(hashmapPurezza)){
+		System.out.println("Cluster n� " + entry.getKey() + " ha una purezza di "  + entry.getValue());
+		}				
+
+	}
+}
+	
+			
+		/*
+		 * Creo i grafi di De Bruijn usando i k-meri		
+		 */
+				
+			// grafo di De Bruijn con all'interno gi� presente una correzione di Tips e Bubbles
+				
+		
+		    // Genero sequenze di DNA dai grafi di De Bruijn (trovando percorsi ottimali - usiamo Eulero) 
+
+
+				
+            //Matrice di Similarit�
+         
+
+
+
+		/*
+		 * REDUCING - Uso l'indice di Jaccard per raggruppare tutte le sequenze in base alla loro somiglianza
+		 */
+				
+		//reducing basato sulla somiglianza
+
+	
